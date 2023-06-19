@@ -8,10 +8,9 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 """
-import logging
 import logging.config
 from dataclasses import asdict
-from typing import Dict, Optional
+from typing import Dict
 
 from django.utils.translation import ugettext as _
 
@@ -26,6 +25,9 @@ from backend.flow.plugins.components.collections.redis.trans_flies import TransF
 from backend.flow.utils.redis.redis_act_playload import RedisActPayload
 from backend.flow.utils.redis.redis_context_dataclass import ActKwargs
 from backend.flow.utils.redis.redis_db_meta import RedisDBMeta
+from backend.ticket.constants import TicketType
+
+cluster_apply_ticket = [TicketType.REDIS_SINGLE_APPLY.value, TicketType.REDIS_CLUSTER_APPLY.value]
 
 logger = logging.getLogger("flow")
 
@@ -76,7 +78,14 @@ def RedisBatchInstallAtomJob(root_id, ticket_data, act_kwargs: ActKwargs, param:
     act_kwargs.cluster["start_port"] = param["start_port"]
     act_kwargs.cluster["inst_num"] = param["instance_numb"]
     act_kwargs.cluster["domain_name"] = act_kwargs.cluster["immute_domain"]
-    act_kwargs.get_redis_payload_func = RedisActPayload.get_redis_install_4_scene.__name__
+    if ticket_data["ticket_type"] in cluster_apply_ticket:
+        #  集群申请单据时，下面参数需要从param中获取，不能从已有配置中获取
+        act_kwargs.cluster["requirepass"] = param["requirepass"]
+        act_kwargs.cluster["databases"] = param["databases"]
+        act_kwargs.cluster["maxmemory"] = param["maxmemory"]
+        act_kwargs.get_redis_payload_func = RedisActPayload.get_install_redis_apply_payload.__name__
+    else:
+        act_kwargs.get_redis_payload_func = RedisActPayload.get_redis_install_4_scene.__name__
     sub_pipeline.add_act(
         act_name=_("Redis-003-{}-安装实例").format(exec_ip),
         act_component_code=ExecuteDBActuatorScriptComponent.code,
